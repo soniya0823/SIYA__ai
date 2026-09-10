@@ -6,6 +6,7 @@ from google.genai import types
 from pypdf import PdfReader
 from gtts import gTTS
 from duckduckgo_search import DDGS
+from PIL import Image
 
 # Safe import for python-dotenv
 try:
@@ -72,7 +73,6 @@ st.markdown("""
         margin-bottom: 12px !important;
     }
 
-    /* Embedded Form Chat Bar Styling */
     .stForm {
         background-color: #161C28 !important;
         border: 1px solid #2E384E !important;
@@ -176,13 +176,17 @@ def speak_text(text):
     audio_bytes.seek(0)
     return audio_bytes
 
+def is_image_generation_request(prompt):
+    triggers = ["generate an image", "create an image", "draw an image", "generate image", "create image", "draw ", "make an image", "picture of"]
+    return any(trigger in prompt.lower() for trigger in triggers)
+
 # 3. Session State Initialization
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "attached_file" not in st.session_state:
+    st.session_state.attached_file = None
 if "pdf_context" not in st.session_state:
     st.session_state.pdf_context = ""
-if "pdf_file_name" not in st.session_state:
-    st.session_state.pdf_file_name = ""
 
 # 4. Sidebar UI Configuration
 with st.sidebar:
@@ -209,10 +213,10 @@ with st.sidebar:
     enable_voice = st.checkbox("Voice Output (TTS)", value=False)
 
     st.divider()
-    if st.button("🗑️ Clear Chat & PDF", use_container_width=True):
+    if st.button("🗑️ Clear Chat & Files", use_container_width=True):
         st.session_state.messages = []
+        st.session_state.attached_file = None
         st.session_state.pdf_context = ""
-        st.session_state.pdf_file_name = ""
         st.rerun()
 
 # 5. Header Title
@@ -225,90 +229,154 @@ SIYA_AVATAR = "⚡"
 for message in st.session_state.messages:
     avatar = USER_AVATAR if message["role"] == "user" else SIYA_AVATAR
     with st.chat_message(message["role"], avatar=avatar):
-        st.markdown(message["content"])
+        if message.get("type") == "image":
+            st.image(message["content"], caption=message.get("caption", "Generated Image"), use_container_width=True)
+        else:
+            st.markdown(message["content"])
 
-# Display attached PDF badge above input bar if active
-if st.session_state.pdf_file_name:
-    st.info(f"📎 Attached PDF: **{st.session_state.pdf_file_name}**")
+# Display attached file indicator if active
+if st.session_state.attached_file:
+    st.info(f"📎 Attached File: **{st.session_state.attached_file['name']}** ({st.session_state.attached_file['type']})")
 
-# 7. Render Input Form at the BOTTOM
+# 7. Render Multimodal Input Form at the BOTTOM
 with st.form(key="chat_form", clear_on_submit=True):
     col_plus, col_input, col_submit = st.columns([0.06, 0.88, 0.06], vertical_alignment="center")
     
     with col_plus:
-        with st.popover("➕", help="Attach PDF"):
-            uploaded_pdf = st.file_uploader("Upload Context PDF", type=["pdf"], key="inline_pdf")
-            if uploaded_pdf:
-                st.session_state.pdf_context = extract_pdf_text(uploaded_pdf)
-                st.session_state.pdf_file_name = uploaded_pdf.name
-                st.success(f"Attached: {uploaded_pdf.name}")
+        with st.popover("➕", help="Attach Images, Videos, Audio, or PDFs"):
+            uploaded_file = st.file_uploader(
+                "Upload Media or File", 
+                type=["pdf", "png", "jpg", "jpeg", "webp", "mp4", "mov", "mp3", "wav"], 
+                key="inline_file"
+            )
+            if uploaded_file:
+                file_bytes = uploaded_file.read()
+                uploaded_file.seek(0)
+                
+                st.session_state.attached_file = {
+                    "name": uploaded_file.name,
+                    "type": uploaded_file.type,
+                    "bytes": file_bytes
+                }
+                
+                if uploaded_file.type == "application/pdf":
+                    st.session_state.pdf_context = extract_pdf_text(uploaded_file)
+                st.success(f"Attached: {uploaded_file.name}")
 
     with col_input:
         prompt_text = st.text_input(
             "Message S I Y A...",
-            placeholder="Ask S I Y A anything...",
+            placeholder="Ask S I Y A anything or request an image (e.g., 'generate an image of a cybernetic cat')...",
             label_visibility="collapsed"
         )
 
     with col_submit:
         submit_button = st.form_submit_button("➔")
 
-# 8. Process Submission After Input Form Rendering
+# 8. Process Submission After Input Form
 if submit_button and prompt_text.strip():
     user_prompt = prompt_text.strip()
     st.session_state.messages.append({"role": "user", "content": user_prompt})
 
-    web_context = ""
-    if enable_web_search:
-        with st.status("Searching live web...", expanded=False):
-            web_context = perform_web_search(user_prompt)
+    active_api_key = gemini_api_key.strip() if gemini_api_key.strip() else st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 
-    system_instruction = "You are S I Y A, a helpful and intelligent AI assistant."
-    if st.session_state.pdf_context:
-        system_instruction += f"\n\nContext from attached document ({st.session_state.pdf_file_name}):\n{st.session_state.pdf_context[:4000]}"
-    if web_context:
-        system_instruction += f"\n\nContext from web search:\n{web_context}"
+    # --- IMAGE GENERATION BRANCH ---
+    if is_image_generation_request(user_prompt) and use_gemini:
+        if not active_api_key:
+            st.error("Please enter a valid Gemini API Key to generate images.")
+        else:
+            with st.chat_message("assistant", avatar=SIYA_AVATAR):
+                with st.spinner("🎨 Generating image with Imagen 3..."):
+                    try:
+                        client = genai.Client(api_key=active_api_key)
+                        result = client.models.generate_images(
+                            model="imagen-3.0-generate-002",
+                            prompt=user_prompt,
+                            config=types.GenerateImagesConfig(
+                                number_of_images=1,
+                                aspect_ratio="1:1"
+                            )
+                        )
+                        
+                        generated_image = result.generated_images[0]
+                        image_bytes = generated_image.image.image_bytes
+                        image = Image.open(io.BytesIO(image_bytes))
 
-    try:
-        if use_gemini:
-            active_api_key = gemini_api_key.strip() if gemini_api_key.strip() else st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
-            
-            if not active_api_key:
-                st.error("Please enter a valid Gemini API Key or configure GEMINI_API_KEY in Streamlit Secrets.")
-            else:
-                client = genai.Client(api_key=active_api_key)
-                
-                gemini_contents = []
-                for m in st.session_state.messages:
-                    role = "user" if m["role"] == "user" else "model"
-                    gemini_contents.append(
-                        types.Content(
-                            role=role,
-                            parts=[types.Part.from_text(text=m["content"])]
+                        st.image(image, caption=user_prompt, use_container_width=True)
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "type": "image",
+                            "content": image_bytes,
+                            "caption": user_prompt
+                        })
+                    except Exception as e:
+                        error_msg = f"Failed to generate image: {str(e)}"
+                        st.error(error_msg)
+                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+    # --- TEXT / MULTIMODAL CHAT BRANCH ---
+    else:
+        web_context = ""
+        if enable_web_search:
+            with st.status("Searching live web...", expanded=False):
+                web_context = perform_web_search(user_prompt)
+
+        system_instruction = "You are S I Y A, a helpful and intelligent AI assistant."
+        if st.session_state.pdf_context:
+            system_instruction += f"\n\nContext from document ({st.session_state.attached_file['name']}):\n{st.session_state.pdf_context[:4000]}"
+        if web_context:
+            system_instruction += f"\n\nContext from web search:\n{web_context}"
+
+        try:
+            if use_gemini:
+                if not active_api_key:
+                    full_response = "Please enter a valid Gemini API Key."
+                else:
+                    client = genai.Client(api_key=active_api_key)
+                    
+                    gemini_contents = []
+                    for m in st.session_state.messages:
+                        if m.get("type") == "image":
+                            continue
+                        role = "user" if m["role"] == "user" else "model"
+                        gemini_contents.append(
+                            types.Content(
+                                role=role,
+                                parts=[types.Part.from_text(text=m["content"])]
+                            )
+                        )
+
+                    # Append raw bytes for media files (Images, Video, Audio)
+                    if st.session_state.attached_file and st.session_state.attached_file["type"] != "application/pdf":
+                        file_data = st.session_state.attached_file
+                        media_part = types.Part.from_bytes(
+                            data=file_data["bytes"],
+                            mime_type=file_data["type"]
+                        )
+                        gemini_contents[-1].parts.append(media_part)
+
+                    response = client.models.generate_content(
+                        model=gemini_model,
+                        contents=gemini_contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction
                         )
                     )
+                    full_response = response.text if response.text else "No response generated."
 
-                response = client.models.generate_content(
-                    model=gemini_model,
-                    contents=gemini_contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction
-                    )
-                )
-                full_response = response.text if response.text else "No response generated."
-
-        else:
-            if ollama is None:
-                st.error("Ollama module is not installed locally.")
             else:
-                formatted_messages = [{"role": "system", "content": system_instruction}] + [
-                    {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
-                ]
-                response = ollama.chat(model="llama3", messages=formatted_messages)
-                full_response = response['message']['content']
+                if ollama is None:
+                    full_response = "Ollama module is not installed locally."
+                else:
+                    formatted_messages = [{"role": "system", "content": system_instruction}] + [
+                        {"role": m["role"], "content": m["content"]} for m in st.session_state.messages if m.get("type") != "image"
+                    ]
+                    response = ollama.chat(model="llama3", messages=formatted_messages)
+                    full_response = response['message']['content']
 
-    except Exception as e:
-        full_response = f"Error generating response: {str(e)}"
+        except Exception as e:
+            full_response = f"Error generating response: {str(e)}"
 
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+
     st.rerun()
