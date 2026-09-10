@@ -1,7 +1,7 @@
 streamlit
 google-genai
 pypdf
-gtts
+gTTS
 duckduckgo-search
 python-dotenv
 pytesseract

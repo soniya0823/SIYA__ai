@@ -6,19 +6,27 @@ from google.genai import types
 from pypdf import PdfReader
 from gtts import gTTS
 from duckduckgo_search import DDGS
-from dotenv import load_dotenv
+
+# Safe import for python-dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # OCR Imports for Scanned/Image-based PDFs
-import pytesseract
-from pdf2image import convert_from_bytes
+try:
+    import pytesseract
+    from pdf2image import convert_from_bytes
+    HAS_OCR = True
+except ImportError:
+    HAS_OCR = False
 
 # Safe import for Ollama
 try:
     import ollama
 except ImportError:
     ollama = None
-
-load_dotenv()
 
 # 1. Page Configuration
 st.set_page_config(
@@ -142,7 +150,7 @@ def extract_pdf_text(uploaded_file):
         if extracted:
             text += extracted + "\n"
             
-    if not text.strip():
+    if not text.strip() and HAS_OCR:
         try:
             images = convert_from_bytes(pdf_bytes)
             ocr_text = [pytesseract.image_to_string(img) for img in images]
@@ -189,7 +197,7 @@ with st.sidebar:
         gemini_api_key = st.text_input("Gemini API Key", type="password", value=secret_key, help="Key loaded automatically from secrets if set.")
         gemini_model = st.selectbox(
             "Model", 
-            ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+            ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         )
     else:
         st.info("⚡ **Mode:** Local (`llama3`) via Ollama")
@@ -299,7 +307,7 @@ if submit_button and prompt_text:
 
             else:
                 if ollama is None:
-                    st.error("Ollama is not available in this environment.")
+                    st.error("Ollama module is not installed locally.")
                 else:
                     formatted_messages = [{"role": "system", "content": system_instruction}] + [
                         {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
