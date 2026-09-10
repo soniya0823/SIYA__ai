@@ -221,8 +221,17 @@ st.markdown('<div class="brand-logo">S I Y A</div>', unsafe_allow_html=True)
 USER_AVATAR = "👤"
 SIYA_AVATAR = "⚡"
 
-# 6. Capture Form Input
-pending_prompt = None
+# 6. Render Active Chat History First
+for message in st.session_state.messages:
+    avatar = USER_AVATAR if message["role"] == "user" else SIYA_AVATAR
+    with st.chat_message(message["role"], avatar=avatar):
+        st.markdown(message["content"])
+
+# Display attached PDF badge above input bar if active
+if st.session_state.pdf_file_name:
+    st.info(f"📎 Attached PDF: **{st.session_state.pdf_file_name}**")
+
+# 7. Render Input Form at the BOTTOM
 with st.form(key="chat_form", clear_on_submit=True):
     col_plus, col_input, col_submit = st.columns([0.06, 0.88, 0.06], vertical_alignment="center")
     
@@ -244,25 +253,15 @@ with st.form(key="chat_form", clear_on_submit=True):
     with col_submit:
         submit_button = st.form_submit_button("➔")
 
-    if submit_button and prompt_text.strip():
-        pending_prompt = prompt_text.strip()
-
-# 7. Render Active Chat History
-for message in st.session_state.messages:
-    avatar = USER_AVATAR if message["role"] == "user" else SIYA_AVATAR
-    with st.chat_message(message["role"], avatar=avatar):
-        st.markdown(message["content"])
-
-# 8. Process Pending Query & Generate Streamed Output
-if pending_prompt:
-    st.session_state.messages.append({"role": "user", "content": pending_prompt})
-    with st.chat_message("user", avatar=USER_AVATAR):
-        st.markdown(pending_prompt)
+# 8. Process Submission After Input Form Rendering
+if submit_button and prompt_text.strip():
+    user_prompt = prompt_text.strip()
+    st.session_state.messages.append({"role": "user", "content": user_prompt})
 
     web_context = ""
     if enable_web_search:
         with st.status("Searching live web...", expanded=False):
-            web_context = perform_web_search(pending_prompt)
+            web_context = perform_web_search(user_prompt)
 
     system_instruction = "You are S I Y A, a helpful and intelligent AI assistant."
     if st.session_state.pdf_context:
@@ -270,69 +269,46 @@ if pending_prompt:
     if web_context:
         system_instruction += f"\n\nContext from web search:\n{web_context}"
 
-    with st.chat_message("assistant", avatar=SIYA_AVATAR):
-        message_placeholder = st.empty()
-        full_response = ""
-
-        try:
-            if use_gemini:
-                active_api_key = gemini_api_key.strip() if gemini_api_key.strip() else st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
+    try:
+        if use_gemini:
+            active_api_key = gemini_api_key.strip() if gemini_api_key.strip() else st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
+            
+            if not active_api_key:
+                st.error("Please enter a valid Gemini API Key or configure GEMINI_API_KEY in Streamlit Secrets.")
+            else:
+                client = genai.Client(api_key=active_api_key)
                 
-                if not active_api_key:
-                    st.error("Please enter a valid Gemini API Key or configure GEMINI_API_KEY in Streamlit Secrets.")
-                else:
-                    client = genai.Client(api_key=active_api_key)
-                    
-                    gemini_contents = []
-                    for m in st.session_state.messages:
-                        role = "user" if m["role"] == "user" else "model"
-                        gemini_contents.append(
-                            types.Content(
-                                role=role,
-                                parts=[types.Part.from_text(text=m["content"])]
-                            )
-                        )
-
-                    response_stream = client.models.generate_content_stream(
-                        model=gemini_model,
-                        contents=gemini_contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=system_instruction
+                gemini_contents = []
+                for m in st.session_state.messages:
+                    role = "user" if m["role"] == "user" else "model"
+                    gemini_contents.append(
+                        types.Content(
+                            role=role,
+                            parts=[types.Part.from_text(text=m["content"])]
                         )
                     )
 
-                    for chunk in response_stream:
-                        if chunk.text:
-                            full_response += chunk.text
-                            message_placeholder.markdown(full_response + "▌")
+                response = client.models.generate_content(
+                    model=gemini_model,
+                    contents=gemini_contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction
+                    )
+                )
+                full_response = response.text if response.text else "No response generated."
 
+        else:
+            if ollama is None:
+                st.error("Ollama module is not installed locally.")
             else:
-                if ollama is None:
-                    st.error("Ollama module is not installed locally.")
-                else:
-                    formatted_messages = [{"role": "system", "content": system_instruction}] + [
-                        {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
-                    ]
-                    stream = ollama.chat(model="llama3", messages=formatted_messages, stream=True)
-                    for chunk in stream:
-                        full_response += chunk['message']['content']
-                        message_placeholder.markdown(full_response + "▌")
+                formatted_messages = [{"role": "system", "content": system_instruction}] + [
+                    {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
+                ]
+                response = ollama.chat(model="llama3", messages=formatted_messages)
+                full_response = response['message']['content']
 
-            message_placeholder.markdown(full_response)
-            
-            if enable_voice and full_response:
-                with st.spinner("Generating audio..."):
-                    audio_fp = speak_text(full_response)
-                    st.audio(audio_fp, format="audio/mp3")
+    except Exception as e:
+        full_response = f"Error generating response: {str(e)}"
 
-        except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
-            full_response = "An error occurred while processing your request."
-
-    if full_response and not full_response.startswith("An error occurred"):
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
-        st.rerun()
-
-# Display attached PDF badge if active
-if st.session_state.pdf_file_name:
-    st.info(f"📎 Attached PDF: **{st.session_state.pdf_file_name}**")
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    st.rerun()
