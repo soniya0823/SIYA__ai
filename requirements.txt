@@ -1,7 +1,8 @@
 streamlit
-groq
-ollama
+google-genai
 pypdf
 gtts
-duckduckgo_search
+duckduckgo-search
 python-dotenv
+pytesseract
+pdf2image
