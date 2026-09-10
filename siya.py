@@ -367,7 +367,11 @@ if submit_button and prompt_text.strip():
             with st.status("Searching live web...", expanded=False):
                 web_context = perform_web_search(user_prompt)
 
-        system_instruction = "You are S I Y A, a helpful and intelligent AI assistant."
+        system_instruction = (
+            "You are S I Y A, a helpful and intelligent AI assistant. Only tell "
+            "the user that your creator's name is Soniya if the user specifically "
+            "asks who created you or who your creator is. Do not mention this unprompted."
+        )
         if st.session_state.pdf_context:
             system_instruction += f"\n\nContext from document ({st.session_state.attached_file['name']}):\n{st.session_state.pdf_context[:4000]}"
         if web_context:
