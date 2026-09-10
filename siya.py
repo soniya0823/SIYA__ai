@@ -63,6 +63,71 @@ st.markdown("""
         padding: 12px 18px !important;
         margin-bottom: 12px !important;
     }
+
+    /* Embedded Form Chat Bar Styling */
+    .stForm {
+        background-color: #161C28 !important;
+        border: 1px solid #2E384E !important;
+        border-radius: 28px !important;
+        padding: 4px 12px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .stForm:focus-within {
+        border-color: #00F2FE !important;
+        box-shadow: 0 0 12px rgba(0, 242, 254, 0.25) !important;
+    }
+
+    div[data-testid="stTextInput"] > label {
+        display: none !important;
+    }
+
+    div[data-testid="stTextInput"] input {
+        background-color: transparent !important;
+        color: #E2E8F0 !important;
+        border: none !important;
+        font-size: 0.95rem !important;
+        box-shadow: none !important;
+    }
+
+    div[data-testid="stPopover"] {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    div[data-testid="stPopover"] > button {
+        background-color: transparent !important;
+        border: none !important;
+        color: #00F2FE !important;
+        font-size: 1.2rem !important;
+        border-radius: 50% !important;
+        width: 36px !important;
+        height: 36px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-height: 0px !important;
+    }
+
+    div[data-testid="stPopover"] > button:hover {
+        background-color: #222B3D !important;
+    }
+
+    div[data-testid="stFormSubmitButton"] > button {
+        background: linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%) !important;
+        color: #0B0E14 !important;
+        border: none !important;
+        font-weight: bold !important;
+        border-radius: 50% !important;
+        width: 36px !important;
+        height: 36px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        min-height: 0px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -116,16 +181,6 @@ with st.sidebar:
     st.caption("<div style='text-align: center; color: #64748B;'>v1.0 • Hybrid Intelligence</div>", unsafe_allow_html=True)
     st.divider()
 
-    st.markdown("##### 📎 Context Attachment")
-    uploaded_pdf = st.file_uploader("Upload PDF Document", type=["pdf"], key="pdf_uploader_sidebar")
-    if uploaded_pdf:
-        st.session_state.pdf_context = extract_pdf_text(uploaded_pdf)
-        st.session_state.pdf_file_name = uploaded_pdf.name
-        st.success(f"Attached: {uploaded_pdf.name}")
-    elif st.session_state.pdf_file_name:
-        st.info(f"Active Context: {st.session_state.pdf_file_name}")
-
-    st.divider()
     st.markdown("##### ⚙️ Engine Settings")
     use_gemini = st.toggle("Use Gemini Cloud API", value=True)
     
@@ -151,7 +206,7 @@ with st.sidebar:
         st.session_state.pdf_file_name = ""
         st.rerun()
 
-# 5. Header
+# 5. Header & Messages
 st.markdown('<div class="brand-logo">S I Y A</div>', unsafe_allow_html=True)
 
 USER_AVATAR = "👤"
@@ -162,8 +217,35 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
-# 6. Chat Input Logic
-if prompt := st.chat_input("Message S I Y A..."):
+# Display active PDF chip above the input box if uploaded
+if st.session_state.pdf_file_name:
+    st.info(f"📎 Attached PDF: **{st.session_state.pdf_file_name}**")
+
+# 6. Integrated Chat Input Bar with '+' Popover
+with st.form(key="chat_form", clear_on_submit=True):
+    col_plus, col_input, col_submit = st.columns([0.06, 0.88, 0.06], vertical_alignment="center")
+    
+    with col_plus:
+        with st.popover("➕", help="Attach PDF"):
+            uploaded_pdf = st.file_uploader("Upload Context PDF", type=["pdf"], key="inline_pdf")
+            if uploaded_pdf:
+                st.session_state.pdf_context = extract_pdf_text(uploaded_pdf)
+                st.session_state.pdf_file_name = uploaded_pdf.name
+                st.success(f"Attached: {uploaded_pdf.name}")
+
+    with col_input:
+        prompt_text = st.text_input(
+            "Message S I Y A...",
+            placeholder="Ask S I Y A anything...",
+            label_visibility="collapsed"
+        )
+
+    with col_submit:
+        submit_button = st.form_submit_button("➔")
+
+# 7. Processing Form Submission
+if submit_button and prompt_text:
+    prompt = prompt_text
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar=USER_AVATAR):
         st.markdown(prompt)
