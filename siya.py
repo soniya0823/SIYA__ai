@@ -171,7 +171,7 @@ def perform_web_search(query):
 
 def speak_text(text):
     # Phonetic tuning so gTTS pronounces "Siya" naturally as "Sih-yah"
-    phonetic_text = text.replace("S I Y A", "Si-yah").replace("SIYA", "Si-yah").replace("Siya", "Si-yah")
+    phonetic_text = text.replace("S I Y A", "Siya").replace("SIYA", "Siya").replace("Siya", "Siya")
     
     tts = gTTS(text=phonetic_text[:300], lang='en')
     audio_bytes = io.BytesIO()
