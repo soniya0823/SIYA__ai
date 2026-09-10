@@ -1,8 +1,10 @@
 streamlit
 google-genai
 pypdf
-gTTS
+gtts
 duckduckgo-search
-python-dotenv
+pillow
 pytesseract
 pdf2image
+python-dotenv
+ollama
