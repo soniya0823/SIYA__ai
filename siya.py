@@ -2,14 +2,9 @@ import os
 import io
 import streamlit as st
 import ollama
-from groq import Groq
 from pypdf import PdfReader
 from gtts import gTTS
 from duckduckgo_search import DDGS
-from dotenv import load_dotenv
-
-# Load environment variables from .env if present
-load_dotenv()
 
 # 1. Page Configuration
 st.set_page_config(
@@ -28,7 +23,7 @@ st.markdown("""
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     
-    /* Header Logo */
+    /* Scaled-down Header Logo */
     .brand-logo {
         font-family: 'Courier New', monospace;
         font-size: 2.2rem !important;
@@ -85,7 +80,7 @@ st.markdown("""
         box-shadow: none !important;
     }
 
-    /* Popover (+) Button Style */
+    /* Target the popover button container directly */
     div[data-testid="stPopover"] {
         display: flex !important;
         align-items: center !important;
@@ -160,13 +155,11 @@ with st.sidebar:
     st.divider()
 
     st.markdown("##### ⚙️ Engine Settings")
-    use_groq = st.toggle("Use Groq Cloud API", value=True)
-    
-    if use_groq:
-        # Check Streamlit secrets or OS environment for default key
-        default_key = st.secrets.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEY", ""))
-        groq_api_key = st.text_input("Groq API Key", type="password", value=default_key)
-        groq_model = st.selectbox("Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"])
+    use_cloud = st.toggle("Use Cloud API (OpenAI)", value=False)
+    if use_cloud:
+        api_key = st.text_input("OpenAI API Key", type="password")
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
     else:
         st.info("⚡ **Mode:** Local (`llama3`) via Ollama")
 
@@ -250,21 +243,18 @@ if submit_button and prompt_text:
         ]
 
         try:
-            if use_groq:
-                if not groq_api_key:
-                    st.error("Please enter your Groq API Key in the sidebar or set it in .env / secrets.toml.")
-                else:
-                    client = Groq(api_key=groq_api_key)
-                    stream = client.chat.completions.create(
-                        model=groq_model,
-                        messages=formatted_messages,
-                        stream=True
-                    )
-                    for chunk in stream:
-                        content = chunk.choices[0].delta.content
-                        if content:
-                            full_response += content
-                            message_placeholder.markdown(full_response + "▌")
+            if use_cloud:
+                from openai import OpenAI
+                client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+                stream = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=formatted_messages,
+                    stream=True
+                )
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        full_response += chunk.choices[0].delta.content
+                        message_placeholder.markdown(full_response + "▌")
             else:
                 stream = ollama.chat(
                     model="llama3",
@@ -287,5 +277,4 @@ if submit_button and prompt_text:
             st.error(f"Error generating response: {str(e)}")
             full_response = "An error occurred while processing your request."
 
-    if full_response and not full_response.startswith("An error occurred"):
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
