@@ -209,7 +209,7 @@ with st.sidebar:
     if use_gemini:
         gemini_model = st.selectbox(
             "Model", 
-            ["gemini-1.5-flash", "gemini-3.6-flash", "gemini-1.5-pro"]
+            ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         )
         st.caption("🟢 Connected via Server Key")
     else:
@@ -400,7 +400,7 @@ if submit_button and prompt_text.strip():
                         )
                         gemini_contents[-1].parts.append(media_part)
 
-                    # Attempt main model call with automatic fallback handling
+                    # Direct call with safe standard model fallback
                     try:
                         response = client.models.generate_content(
                             model=gemini_model,
@@ -412,9 +412,9 @@ if submit_button and prompt_text.strip():
                         full_response = response.text if response.text else "No response generated."
                     except Exception as primary_err:
                         err_text = str(primary_err)
-                        if ("429" in err_text or "RESOURCE_EXHAUSTED" in err_text) and gemini_model != "gemini-1.5-flash":
+                        if "404" in err_text or "NOT_FOUND" in err_text or "429" in err_text or "RESOURCE_EXHAUSTED" in err_text:
                             # Automatic Fallback to gemini-1.5-flash
-                            st.toast("Quota limit hit for selected model. Falling back to Gemini 1.5 Flash...")
+                            st.toast("Primary model unavailable or quota reached. Switching to gemini-1.5-flash...")
                             fallback_resp = client.models.generate_content(
                                 model="gemini-1.5-flash",
                                 contents=gemini_contents,
@@ -423,8 +423,6 @@ if submit_button and prompt_text.strip():
                                 )
                             )
                             full_response = fallback_resp.text if fallback_resp.text else "No response generated."
-                        elif "429" in err_text or "RESOURCE_EXHAUSTED" in err_text:
-                            full_response = "⚠️ **Quota Limit Exceeded:** You hit the free tier daily request limit for this model. Please wait a minute or try switching models in the sidebar."
                         else:
                             raise primary_err
 
