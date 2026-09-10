@@ -1,0 +1,7 @@
+streamlit
+groq
+ollama
+pypdf
+gtts
+duckduckgo_search
+python-dotenv
