@@ -170,8 +170,7 @@ def perform_web_search(query):
         return f"Web search error: {str(e)}"
 
 def speak_text(text):
-    # Phonetic tuning so gTTS pronounces "Siya" naturally as "Sih-yah"
-    phonetic_text = text.replace("S I Y A", "Si-ya").replace("SIYA", "Si-ya").replace("Siya", "Si-ya")
+    phonetic_text = text.replace("S I Y A", "Sih-yah").replace("SIYA", "Sih-yah").replace("Siya", "Sih-yah")
     
     tts = gTTS(text=phonetic_text[:300], lang='en')
     audio_bytes = io.BytesIO()
@@ -190,6 +189,13 @@ if "attached_file" not in st.session_state:
     st.session_state.attached_file = None
 if "pdf_context" not in st.session_state:
     st.session_state.pdf_context = ""
+if "insights" not in st.session_state:
+    st.session_state.insights = {
+        "thumbs_up": 0,
+        "thumbs_down": 0,
+        "total_queries": 0,
+        "history": []
+    }
 
 # 4. Sidebar UI Configuration
 with st.sidebar:
@@ -205,7 +211,7 @@ with st.sidebar:
         gemini_api_key = st.text_input("Gemini API Key", type="password", value=secret_key, help="Key loaded automatically from secrets if set.")
         gemini_model = st.selectbox(
             "Model", 
-            ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+            ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         )
     else:
         st.info("⚡ **Mode:** Local (`llama3`) via Ollama")
@@ -214,6 +220,25 @@ with st.sidebar:
     st.markdown("##### 🛠️ Capabilities")
     enable_web_search = st.checkbox("Live Web Search", value=False)
     enable_voice = st.checkbox("Voice Output (TTS)", value=False)
+
+    st.divider()
+    st.markdown("##### 📊 SIYA Insights & Analytics")
+    st.metric("Total Prompts Processed", st.session_state.insights["total_queries"])
+    
+    # 1. Feedback Ratio Bar Chart
+    feedback_data = {
+        "Positive (👍)": st.session_state.insights["thumbs_up"],
+        "Negative (👎)": st.session_state.insights["thumbs_down"]
+    }
+    st.caption("Feedback Distribution")
+    st.bar_chart(feedback_data, height=160)
+
+    # 2. Query Growth Line Chart
+    if st.session_state.insights["history"]:
+        st.caption("Prompts Processed Over Time")
+        st.line_chart(st.session_state.insights["history"], height=160)
+    else:
+        st.info("Ask SIYA questions to populate the usage graph!")
 
     st.divider()
     if st.button("🗑️ Clear Chat & Files", use_container_width=True):
@@ -228,8 +253,8 @@ st.markdown('<div class="brand-logo">S I Y A</div>', unsafe_allow_html=True)
 USER_AVATAR = "👤"
 SIYA_AVATAR = "⚡"
 
-# 6. Render Active Chat History First
-for message in st.session_state.messages:
+# 6. Render Active Chat History & Reviews Widget
+for idx, message in enumerate(st.session_state.messages):
     avatar = USER_AVATAR if message["role"] == "user" else SIYA_AVATAR
     with st.chat_message(message["role"], avatar=avatar):
         if message.get("type") == "image":
@@ -238,6 +263,18 @@ for message in st.session_state.messages:
             st.markdown(message["content"])
             if message.get("audio"):
                 st.audio(message["audio"], format="audio/mp3", autoplay=False)
+
+        # Review/Feedback Buttons for Assistant Responses
+        if message["role"] == "assistant" and message.get("type") != "image":
+            col_like, col_dislike, _ = st.columns([0.08, 0.08, 0.84])
+            if col_like.button("👍", key=f"like_{idx}"):
+                st.session_state.insights["thumbs_up"] += 1
+                st.toast("Thanks for your feedback!")
+                st.rerun()
+            if col_dislike.button("👎", key=f"dislike_{idx}"):
+                st.session_state.insights["thumbs_down"] += 1
+                st.toast("Thanks! We'll work on improving SIYA.")
+                st.rerun()
 
 # Display attached file indicator if active
 if st.session_state.attached_file:
@@ -282,6 +319,10 @@ with st.form(key="chat_form", clear_on_submit=True):
 if submit_button and prompt_text.strip():
     user_prompt = prompt_text.strip()
     st.session_state.messages.append({"role": "user", "content": user_prompt})
+    
+    # Update Analytics Data
+    st.session_state.insights["total_queries"] += 1
+    st.session_state.insights["history"].append(st.session_state.insights["total_queries"])
 
     active_api_key = gemini_api_key.strip() if gemini_api_key.strip() else st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 
