@@ -323,13 +323,20 @@ if submit_button and prompt_text.strip():
     st.session_state.insights["total_queries"] += 1
     st.session_state.insights["history"].append(st.session_state.insights["total_queries"])
 
-    # Retrieve API key strictly from Streamlit Secrets or environment variables
-    active_api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
+    # Retrieve API key safely across Streamlit Cloud, .env, and OS environment
+    active_api_key = None
+    try:
+        active_api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        active_api_key = os.environ.get("GEMINI_API_KEY", "")
 
     # --- IMAGE GENERATION BRANCH ---
     if is_image_generation_request(user_prompt) and use_gemini:
         if not active_api_key:
-            st.error("API key is missing in Streamlit Secrets (`GEMINI_API_KEY`).")
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": "⚠️ **API Key Missing:** Please add `GEMINI_API_KEY` to Streamlit Cloud Secrets or your `.env` file."
+            })
         else:
             try:
                 client = genai.Client(api_key=active_api_key)
@@ -375,7 +382,7 @@ if submit_button and prompt_text.strip():
         try:
             if use_gemini:
                 if not active_api_key:
-                    full_response = "API key is missing in Streamlit Secrets (`GEMINI_API_KEY`)."
+                    full_response = "⚠️ **API Key Missing:** Please add `GEMINI_API_KEY` to Streamlit Cloud Secrets or your `.env` file."
                 else:
                     client = genai.Client(api_key=active_api_key)
                     
@@ -413,7 +420,6 @@ if submit_button and prompt_text.strip():
                     except Exception as primary_err:
                         err_text = str(primary_err)
                         if "404" in err_text or "NOT_FOUND" in err_text or "429" in err_text or "RESOURCE_EXHAUSTED" in err_text:
-                            # Automatic Fallback to gemini-1.5-flash
                             st.toast("Primary model unavailable or quota reached. Switching to gemini-1.5-flash...")
                             fallback_resp = client.models.generate_content(
                                 model="gemini-1.5-flash",
@@ -442,7 +448,7 @@ if submit_button and prompt_text.strip():
         assistant_msg = {"role": "assistant", "content": full_response}
 
         # Generate Audio if Voice Output is enabled in sidebar
-        if enable_voice and full_response and not full_response.startswith("Error"):
+        if enable_voice and full_response and not full_response.startswith("Error") and not full_response.startswith("⚠️"):
             try:
                 audio_fp = speak_text(full_response)
                 assistant_msg["audio"] = audio_fp.getvalue()
