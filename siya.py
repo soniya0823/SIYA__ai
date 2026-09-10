@@ -46,14 +46,14 @@ st.markdown("""
     
     .brand-logo {
         font-family: 'Courier New', monospace;
-        font-size: 2.2rem !important;
+        font-size: 3.2rem !important;
         font-weight: 800 !important;
-        letter-spacing: 0.25em !important;
+        letter-spacing: 0.3em !important;
         background: linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%);
         -webkit-background-clip: text !important;
         -webkit-text-fill-color: transparent !important;
         text-align: center !important;
-        margin: 0 auto 20px auto !important;
+        margin: 10px auto 30px auto !important;
         width: 100% !important;
         display: block !important;
         box-sizing: border-box !important;
@@ -79,6 +79,7 @@ st.markdown("""
         border-radius: 28px !important;
         padding: 4px 12px !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        margin-top: 20px !important;
     }
 
     .stForm:focus-within {
@@ -197,7 +198,7 @@ with st.sidebar:
         gemini_api_key = st.text_input("Gemini API Key", type="password", value=secret_key, help="Key loaded automatically from secrets if set.")
         gemini_model = st.selectbox(
             "Model", 
-            ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+            ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"]
         )
     else:
         st.info("⚡ **Mode:** Local (`llama3`) via Ollama")
@@ -214,22 +215,14 @@ with st.sidebar:
         st.session_state.pdf_file_name = ""
         st.rerun()
 
-# 5. Header & Messages
+# 5. Larger Header Title
 st.markdown('<div class="brand-logo">S I Y A</div>', unsafe_allow_html=True)
 
 USER_AVATAR = "👤"
 SIYA_AVATAR = "⚡"
 
-for message in st.session_state.messages:
-    avatar = USER_AVATAR if message["role"] == "user" else SIYA_AVATAR
-    with st.chat_message(message["role"], avatar=avatar):
-        st.markdown(message["content"])
-
-# Display active PDF chip above the input box if uploaded
-if st.session_state.pdf_file_name:
-    st.info(f"📎 Attached PDF: **{st.session_state.pdf_file_name}**")
-
-# 6. Integrated Chat Input Bar with '+' Popover
+# Handle Form Submission Logic before rendering layout
+pending_prompt = None
 with st.form(key="chat_form", clear_on_submit=True):
     col_plus, col_input, col_submit = st.columns([0.06, 0.88, 0.06], vertical_alignment="center")
     
@@ -251,17 +244,25 @@ with st.form(key="chat_form", clear_on_submit=True):
     with col_submit:
         submit_button = st.form_submit_button("➔")
 
-# 7. Processing Form Submission
-if submit_button and prompt_text:
-    prompt = prompt_text
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    if submit_button and prompt_text.strip():
+        pending_prompt = prompt_text.strip()
+
+# 6. Render Chat Messages
+for message in st.session_state.messages:
+    avatar = USER_AVATAR if message["role"] == "user" else SIYA_AVATAR
+    with st.chat_message(message["role"], avatar=avatar):
+        st.markdown(message["content"])
+
+# 7. Process Pending Prompt and Stream Assistant Output
+if pending_prompt:
+    st.session_state.messages.append({"role": "user", "content": pending_prompt})
     with st.chat_message("user", avatar=USER_AVATAR):
-        st.markdown(prompt)
+        st.markdown(pending_prompt)
 
     web_context = ""
     if enable_web_search:
         with st.status("Searching live web...", expanded=False):
-            web_context = perform_web_search(prompt)
+            web_context = perform_web_search(pending_prompt)
 
     system_instruction = "You are S I Y A, a helpful and intelligent AI assistant."
     if st.session_state.pdf_context:
@@ -330,3 +331,8 @@ if submit_button and prompt_text:
 
     if full_response and not full_response.startswith("An error occurred"):
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.rerun()
+
+# Display active PDF chip above the chat bar if uploaded
+if st.session_state.pdf_file_name:
+    st.info(f"📎 Attached PDF: **{st.session_state.pdf_file_name}**")
