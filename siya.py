@@ -233,6 +233,8 @@ for message in st.session_state.messages:
             st.image(message["content"], caption=message.get("caption", "Generated Image"), use_container_width=True)
         else:
             st.markdown(message["content"])
+            if message.get("audio"):
+                st.audio(message["audio"], format="audio/mp3", autoplay=False)
 
 # Display attached file indicator if active
 if st.session_state.attached_file:
@@ -266,7 +268,7 @@ with st.form(key="chat_form", clear_on_submit=True):
     with col_input:
         prompt_text = st.text_input(
             "Message S I Y A...",
-            placeholder="Ask S I Y A anything or request an image (e.g., 'generate an image of a cybernetic cat')...",
+            placeholder="Ask S I Y A anything or request an image (e.g., 'generate an image of a cat')...",
             label_visibility="collapsed"
         )
 
@@ -285,34 +287,29 @@ if submit_button and prompt_text.strip():
         if not active_api_key:
             st.error("Please enter a valid Gemini API Key to generate images.")
         else:
-            with st.chat_message("assistant", avatar=SIYA_AVATAR):
-                with st.spinner("🎨 Generating image with Imagen 3..."):
-                    try:
-                        client = genai.Client(api_key=active_api_key)
-                        result = client.models.generate_images(
-                            model="imagen-3.0-generate-002",
-                            prompt=user_prompt,
-                            config=types.GenerateImagesConfig(
-                                number_of_images=1,
-                                aspect_ratio="1:1"
-                            )
-                        )
-                        
-                        generated_image = result.generated_images[0]
-                        image_bytes = generated_image.image.image_bytes
-                        image = Image.open(io.BytesIO(image_bytes))
+            try:
+                client = genai.Client(api_key=active_api_key)
+                result = client.models.generate_images(
+                    model="imagen-3.0-generate-002",
+                    prompt=user_prompt,
+                    config=types.GenerateImagesConfig(
+                        number_of_images=1,
+                        aspect_ratio="1:1"
+                    )
+                )
+                
+                generated_image = result.generated_images[0]
+                image_bytes = generated_image.image.image_bytes
 
-                        st.image(image, caption=user_prompt, use_container_width=True)
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "type": "image",
-                            "content": image_bytes,
-                            "caption": user_prompt
-                        })
-                    except Exception as e:
-                        error_msg = f"Failed to generate image: {str(e)}"
-                        st.error(error_msg)
-                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "type": "image",
+                    "content": image_bytes,
+                    "caption": user_prompt
+                })
+            except Exception as e:
+                error_msg = f"Failed to generate image: {str(e)}"
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
     # --- TEXT / MULTIMODAL CHAT BRANCH ---
     else:
@@ -377,6 +374,16 @@ if submit_button and prompt_text.strip():
         except Exception as e:
             full_response = f"Error generating response: {str(e)}"
 
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        assistant_msg = {"role": "assistant", "content": full_response}
+
+        # Generate Audio if Voice Output is enabled in sidebar
+        if enable_voice and full_response and not full_response.startswith("Error"):
+            try:
+                audio_fp = speak_text(full_response)
+                assistant_msg["audio"] = audio_fp.getvalue()
+            except Exception as e:
+                st.warning(f"Voice generation failed: {str(e)}")
+
+        st.session_state.messages.append(assistant_msg)
 
     st.rerun()
