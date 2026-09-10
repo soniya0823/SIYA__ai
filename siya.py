@@ -209,7 +209,7 @@ with st.sidebar:
     if use_gemini:
         gemini_model = st.selectbox(
             "Model", 
-            ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+            ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
         )
         st.caption("🟢 Connected via Server Key")
     else:
@@ -224,7 +224,6 @@ with st.sidebar:
     st.markdown("##### 📊 SIYA Insights & Analytics")
     st.metric("Total Prompts Processed", st.session_state.insights["total_queries"])
     
-    # Feedback Ratio Bar Chart
     feedback_data = {
         "Positive (👍)": st.session_state.insights["thumbs_up"],
         "Negative (👎)": st.session_state.insights["thumbs_down"]
@@ -232,7 +231,6 @@ with st.sidebar:
     st.caption("Feedback Distribution")
     st.bar_chart(feedback_data, height=160)
 
-    # Query Growth Line Chart
     if st.session_state.insights["history"]:
         st.caption("Prompts Processed Over Time")
         st.line_chart(st.session_state.insights["history"], height=160)
@@ -263,7 +261,6 @@ for idx, message in enumerate(st.session_state.messages):
             if message.get("audio"):
                 st.audio(message["audio"], format="audio/mp3", autoplay=False)
 
-        # Review/Feedback Buttons for Assistant Responses
         if message["role"] == "assistant" and message.get("type") != "image":
             col_like, col_dislike, _ = st.columns([0.08, 0.08, 0.84])
             if col_like.button("👍", key=f"like_{idx}"):
@@ -275,7 +272,6 @@ for idx, message in enumerate(st.session_state.messages):
                 st.toast("Thanks! We'll work on improving SIYA.")
                 st.rerun()
 
-# Display attached file indicator if active
 if st.session_state.attached_file:
     st.info(f"📎 Attached File: **{st.session_state.attached_file['name']}** ({st.session_state.attached_file['type']})")
 
@@ -319,11 +315,9 @@ if submit_button and prompt_text.strip():
     user_prompt = prompt_text.strip()
     st.session_state.messages.append({"role": "user", "content": user_prompt})
     
-    # Update Analytics Data
     st.session_state.insights["total_queries"] += 1
     st.session_state.insights["history"].append(st.session_state.insights["total_queries"])
 
-    # Retrieve API key safely across Streamlit Cloud, .env, and OS environment
     active_api_key = None
     try:
         active_api_key = st.secrets["GEMINI_API_KEY"]
@@ -335,7 +329,7 @@ if submit_button and prompt_text.strip():
         if not active_api_key:
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": "⚠️ **API Key Missing:** Please add `GEMINI_API_KEY` to Streamlit Cloud Secrets or your `.env` file."
+                "content": "⚠️ **API Key Missing:** Please add `GEMINI_API_KEY` to Streamlit Cloud Secrets."
             })
         else:
             try:
@@ -382,7 +376,7 @@ if submit_button and prompt_text.strip():
         try:
             if use_gemini:
                 if not active_api_key:
-                    full_response = "⚠️ **API Key Missing:** Please add `GEMINI_API_KEY` to Streamlit Cloud Secrets or your `.env` file."
+                    full_response = "⚠️ **API Key Missing:** Please add `GEMINI_API_KEY` to Streamlit Cloud Secrets."
                 else:
                     client = genai.Client(api_key=active_api_key)
                     
@@ -398,7 +392,6 @@ if submit_button and prompt_text.strip():
                             )
                         )
 
-                    # Append raw bytes for media files
                     if st.session_state.attached_file and st.session_state.attached_file["type"] != "application/pdf":
                         file_data = st.session_state.attached_file
                         media_part = types.Part.from_bytes(
@@ -407,30 +400,14 @@ if submit_button and prompt_text.strip():
                         )
                         gemini_contents[-1].parts.append(media_part)
 
-                    # Direct call with safe standard model fallback
-                    try:
-                        response = client.models.generate_content(
-                            model=gemini_model,
-                            contents=gemini_contents,
-                            config=types.GenerateContentConfig(
-                                system_instruction=system_instruction
-                            )
+                    response = client.models.generate_content(
+                        model=gemini_model,
+                        contents=gemini_contents,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction
                         )
-                        full_response = response.text if response.text else "No response generated."
-                    except Exception as primary_err:
-                        err_text = str(primary_err)
-                        if "404" in err_text or "NOT_FOUND" in err_text or "429" in err_text or "RESOURCE_EXHAUSTED" in err_text:
-                            st.toast("Primary model unavailable or quota reached. Switching to gemini-1.5-flash...")
-                            fallback_resp = client.models.generate_content(
-                                model="gemini-1.5-flash",
-                                contents=gemini_contents,
-                                config=types.GenerateContentConfig(
-                                    system_instruction=system_instruction
-                                )
-                            )
-                            full_response = fallback_resp.text if fallback_resp.text else "No response generated."
-                        else:
-                            raise primary_err
+                    )
+                    full_response = response.text if response.text else "No response generated."
 
             else:
                 if ollama is None:
@@ -447,7 +424,6 @@ if submit_button and prompt_text.strip():
 
         assistant_msg = {"role": "assistant", "content": full_response}
 
-        # Generate Audio if Voice Output is enabled in sidebar
         if enable_voice and full_response and not full_response.startswith("Error") and not full_response.startswith("⚠️"):
             try:
                 audio_fp = speak_text(full_response)
