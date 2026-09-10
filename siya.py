@@ -207,12 +207,11 @@ with st.sidebar:
     use_gemini = st.toggle("Use Gemini Cloud API", value=True)
     
     if use_gemini:
-        secret_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
-        gemini_api_key = st.text_input("Gemini API Key", type="password", value=secret_key, help="Key loaded automatically from secrets if set.")
         gemini_model = st.selectbox(
             "Model", 
             ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         )
+        st.caption("🟢 Connected via Server Key")
     else:
         st.info("⚡ **Mode:** Local (`llama3`) via Ollama")
 
@@ -225,7 +224,7 @@ with st.sidebar:
     st.markdown("##### 📊 SIYA Insights & Analytics")
     st.metric("Total Prompts Processed", st.session_state.insights["total_queries"])
     
-    # 1. Feedback Ratio Bar Chart
+    # Feedback Ratio Bar Chart
     feedback_data = {
         "Positive (👍)": st.session_state.insights["thumbs_up"],
         "Negative (👎)": st.session_state.insights["thumbs_down"]
@@ -233,7 +232,7 @@ with st.sidebar:
     st.caption("Feedback Distribution")
     st.bar_chart(feedback_data, height=160)
 
-    # 2. Query Growth Line Chart
+    # Query Growth Line Chart
     if st.session_state.insights["history"]:
         st.caption("Prompts Processed Over Time")
         st.line_chart(st.session_state.insights["history"], height=160)
@@ -324,12 +323,13 @@ if submit_button and prompt_text.strip():
     st.session_state.insights["total_queries"] += 1
     st.session_state.insights["history"].append(st.session_state.insights["total_queries"])
 
-    active_api_key = gemini_api_key.strip() if gemini_api_key.strip() else st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
+    # Retrieve API key strictly from Streamlit Secrets or environment variables
+    active_api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 
     # --- IMAGE GENERATION BRANCH ---
     if is_image_generation_request(user_prompt) and use_gemini:
         if not active_api_key:
-            st.error("Please enter a valid Gemini API Key to generate images.")
+            st.error("API key is missing in Streamlit Secrets (`GEMINI_API_KEY`).")
         else:
             try:
                 client = genai.Client(api_key=active_api_key)
@@ -371,7 +371,7 @@ if submit_button and prompt_text.strip():
         try:
             if use_gemini:
                 if not active_api_key:
-                    full_response = "Please enter a valid Gemini API Key."
+                    full_response = "API key is missing in Streamlit Secrets (`GEMINI_API_KEY`)."
                 else:
                     client = genai.Client(api_key=active_api_key)
                     
@@ -387,7 +387,7 @@ if submit_button and prompt_text.strip():
                             )
                         )
 
-                    # Append raw bytes for media files (Images, Video, Audio)
+                    # Append raw bytes for media files
                     if st.session_state.attached_file and st.session_state.attached_file["type"] != "application/pdf":
                         file_data = st.session_state.attached_file
                         media_part = types.Part.from_bytes(
