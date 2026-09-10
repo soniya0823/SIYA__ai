@@ -189,7 +189,7 @@ with st.sidebar:
         gemini_api_key = st.text_input("Gemini API Key", type="password", value=secret_key, help="Key loaded automatically from secrets if set.")
         gemini_model = st.selectbox(
             "Model", 
-            ["gemini-2.5-flash", "gemini-2.5-pro"]
+            ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
         )
     else:
         st.info("⚡ **Mode:** Local (`llama3`) via Ollama")
