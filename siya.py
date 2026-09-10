@@ -198,7 +198,7 @@ with st.sidebar:
         gemini_api_key = st.text_input("Gemini API Key", type="password", value=secret_key, help="Key loaded automatically from secrets if set.")
         gemini_model = st.selectbox(
             "Model", 
-            ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"]
+            ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         )
     else:
         st.info("⚡ **Mode:** Local (`llama3`) via Ollama")
@@ -215,13 +215,13 @@ with st.sidebar:
         st.session_state.pdf_file_name = ""
         st.rerun()
 
-# 5. Larger Header Title
+# 5. Header Title
 st.markdown('<div class="brand-logo">S I Y A</div>', unsafe_allow_html=True)
 
 USER_AVATAR = "👤"
 SIYA_AVATAR = "⚡"
 
-# Handle Form Submission Logic before rendering layout
+# 6. Capture Form Input
 pending_prompt = None
 with st.form(key="chat_form", clear_on_submit=True):
     col_plus, col_input, col_submit = st.columns([0.06, 0.88, 0.06], vertical_alignment="center")
@@ -247,13 +247,13 @@ with st.form(key="chat_form", clear_on_submit=True):
     if submit_button and prompt_text.strip():
         pending_prompt = prompt_text.strip()
 
-# 6. Render Chat Messages
+# 7. Render Active Chat History
 for message in st.session_state.messages:
     avatar = USER_AVATAR if message["role"] == "user" else SIYA_AVATAR
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
-# 7. Process Pending Prompt and Stream Assistant Output
+# 8. Process Pending Query & Generate Streamed Output
 if pending_prompt:
     st.session_state.messages.append({"role": "user", "content": pending_prompt})
     with st.chat_message("user", avatar=USER_AVATAR):
@@ -333,6 +333,6 @@ if pending_prompt:
         st.session_state.messages.append({"role": "assistant", "content": full_response})
         st.rerun()
 
-# Display active PDF chip above the chat bar if uploaded
+# Display attached PDF badge if active
 if st.session_state.pdf_file_name:
     st.info(f"📎 Attached PDF: **{st.session_state.pdf_file_name}**")
