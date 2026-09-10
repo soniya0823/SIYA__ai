@@ -170,7 +170,10 @@ def perform_web_search(query):
         return f"Web search error: {str(e)}"
 
 def speak_text(text):
-    tts = gTTS(text=text[:300], lang='en')
+    # Phonetic replacements to ensure gTTS pronounces "SIYA" as "See-yah"
+    phonetic_text = text.replace("S I Y A", "See-yah").replace("SIYA", "See-yah").replace("Siya", "See-yah")
+    
+    tts = gTTS(text=phonetic_text[:300], lang='en')
     audio_bytes = io.BytesIO()
     tts.write_to_fp(audio_bytes)
     audio_bytes.seek(0)
